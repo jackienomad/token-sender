@@ -1,0 +1,48 @@
+version: 0.2
+env:
+  # shell: bash
+  parameter-store:
+    ENV_VARS: /aw/sovrun/token-sender/env
+  # secrets-manager:
+  #   KEY: name/name/etc
+phases:
+  # install: # used for Cloudfront
+  #If you use the Ubuntu standard image 2.0 or later, you must specify runtime-versions.
+  #If you specify runtime-versions and use an image other than Ubuntu standard image 2.0, the build fails.
+  # runtime-versions:
+  #   nodejs: 16
+  install:
+    runtime-versions:
+      docker: 18
+  pre_build:
+    commands:
+      # - echo Installing source NPM dependencies...
+      # - npm install --force --legacy-peer-deps
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      # - COMMIT_HASH=$(git rev-parse --short HEAD)
+  build:
+    commands:
+      - echo Build started on 'date'
+      - echo no build is needed .. just passing this stage get artifacts
+
+      - echo $ENV_VARS > ./.env
+
+      - echo building image
+      - export $(cat ./.env)
+      
+      - docker build --build-arg HOSTNAME=$HOSTNAME --build-arg WALLET_PRIVATE_KEY=$WALLET_PRIVATE_KEY -t $REPOSITORY_URI:$COMMIT_HASH .
+      - docker push $REPOSITORY_URI:$COMMIT_HASH
+      - docker tag $REPOSITORY_URI:$COMMIT_HASH $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:latest
+  post_build:
+    commands:
+      - aws lambda update-function-code --function-name $CONTAINER_NAME-function --image-uri $REPOSITORY_URI:$COMMIT_HASH
+      # - echo Build completed on `date`
+      # - echo Pushing the Docker image...
+      # - docker push $REPOSITORY_URI:$COMMIT_HASH
+      # - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$COMMIT_HASH > ./imagedefinitions.json
+      # - echo 'completed..'
+# artifacts:
+#   files: imagedefinitions.json
